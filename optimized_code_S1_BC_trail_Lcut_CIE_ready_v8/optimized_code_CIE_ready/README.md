@@ -22,6 +22,9 @@ Run an end-to-end demo on **synthetic** parts (no confidential data):
 python -m experiments.run_demo --n_seeds 3 --seed0 1000
 ```
 
+Execution time depends on hardware; enabling **Numba JIT** (already included in the
+dependencies) is highly recommended for reproducing large-scale experiments.
+
 Parallel across seeds (useful when you run many seeds for the paper):
 
 ```bash
