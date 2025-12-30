@@ -4,6 +4,8 @@ from typing import List, Tuple, Optional
 import random
 import math
 
+from numba import njit
+
 EPS = 1e-9
 
 
@@ -33,15 +35,27 @@ class Board:
     placed: List[PlacedPart] = field(default_factory=list)
 
 
-def _overlap(a: Rect, b: Rect) -> bool:
+@njit(cache=True, fastmath=True)
+def _overlap_jit(ax: float, ay: float, aw: float, ah: float,
+                 bx: float, by: float, bw: float, bh: float) -> bool:
     # strict overlap (touching edge is allowed)
-    return (a.x < b.x + b.w - EPS and a.x + a.w > b.x + EPS and
-            a.y < b.y + b.h - EPS and a.y + a.h > b.y + EPS)
+    return (ax < bx + bw - EPS and ax + aw > bx + EPS and
+            ay < by + bh - EPS and ay + ah > by + EPS)
+
+
+@njit(cache=True, fastmath=True)
+def _inside_board_jit(rx: float, ry: float, rw: float, rh: float,
+                      W: float, H: float) -> bool:
+    return (rx >= -EPS and ry >= -EPS and
+            rx + rw <= W + EPS and ry + rh <= H + EPS)
+
+
+def _overlap(a: Rect, b: Rect) -> bool:
+    return _overlap_jit(a.x, a.y, a.w, a.h, b.x, b.y, b.w, b.h)
 
 
 def _inside_board(r: Rect, W: float, H: float) -> bool:
-    return (r.x >= -EPS and r.y >= -EPS and
-            r.x + r.w <= W + EPS and r.y + r.h <= H + EPS)
+    return _inside_board_jit(r.x, r.y, r.w, r.h, W, H)
 
 
 def _can_place(board: Board, r: Rect) -> bool:
