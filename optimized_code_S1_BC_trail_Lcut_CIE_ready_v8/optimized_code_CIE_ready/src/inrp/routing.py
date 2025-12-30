@@ -581,11 +581,12 @@ def two_opt(order: List[int], points: List[Point], start: Point = (0.0, 0.0), it
 
 
 def air_length_by_components(comps: List[Set[Point]], start: Point = (0.0, 0.0)) -> float:
-    """Air-move length via greedy GTSP endpoint selection over components.
+    """Air-move length via greedy dynamic endpoint selection over components.
 
     Each component is treated as a cluster of candidate endpoints. We greedily
-    move to the closest endpoint among all unvisited components, which yields
-    a simple yet more realistic "dynamic endpoint" approximation than centroid TSP.
+    move to the nearest component by minimizing the distance between any point
+    in the current component (or start point) and any point in the candidate.
+    This avoids centroid artifacts for concave or long parts.
     """
     if not comps:
         return 0.0
@@ -594,24 +595,22 @@ def air_length_by_components(comps: List[Set[Point]], start: Point = (0.0, 0.0))
     if not remaining:
         return 0.0
 
-    cur = start
+    current_points = [start]
     L = 0.0
     while remaining:
         best_idx = None
-        best_pt = None
         best_d = 1e100
         for i, pts in enumerate(remaining):
             for p in pts:
-                d = _euclid(cur, p)
-                if d < best_d:
-                    best_d = d
-                    best_idx = i
-                    best_pt = p
+                for cur in current_points:
+                    d = _euclid(cur, p)
+                    if d < best_d:
+                        best_d = d
+                        best_idx = i
         L += best_d
-        cur = best_pt
-        remaining.pop(best_idx)
+        current_points = remaining.pop(best_idx)
 
-    L += _euclid(cur, start)
+    L += min(_euclid(p, start) for p in current_points)
     return L
 
 
