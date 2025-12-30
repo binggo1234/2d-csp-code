@@ -4,6 +4,7 @@ from typing import List, Tuple, Optional
 import random
 import math
 
+import numpy as np
 from numba import njit
 
 EPS = 1e-9
@@ -50,6 +51,20 @@ def _inside_board_jit(rx: float, ry: float, rw: float, rh: float,
             rx + rw <= W + EPS and ry + rh <= H + EPS)
 
 
+@njit(cache=True, fastmath=True)
+def _can_place_jit(rx: float, ry: float, rw: float, rh: float,
+                   W: float, H: float,
+                   xs: np.ndarray, ys: np.ndarray,
+                   ws: np.ndarray, hs: np.ndarray) -> bool:
+    if not _inside_board_jit(rx, ry, rw, rh, W, H):
+        return False
+    n = xs.shape[0]
+    for i in range(n):
+        if _overlap_jit(rx, ry, rw, rh, xs[i], ys[i], ws[i], hs[i]):
+            return False
+    return True
+
+
 def _overlap(a: Rect, b: Rect) -> bool:
     return _overlap_jit(a.x, a.y, a.w, a.h, b.x, b.y, b.w, b.h)
 
@@ -59,12 +74,20 @@ def _inside_board(r: Rect, W: float, H: float) -> bool:
 
 
 def _can_place(board: Board, r: Rect) -> bool:
-    if not _inside_board(r, board.W, board.H):
-        return False
-    for pp in board.placed:
-        if _overlap(r, pp.rect):
-            return False
-    return True
+    if not board.placed:
+        return _inside_board(r, board.W, board.H)
+    n = len(board.placed)
+    xs = np.empty(n, dtype=np.float64)
+    ys = np.empty(n, dtype=np.float64)
+    ws = np.empty(n, dtype=np.float64)
+    hs = np.empty(n, dtype=np.float64)
+    for i, pp in enumerate(board.placed):
+        rect = pp.rect
+        xs[i] = rect.x
+        ys[i] = rect.y
+        ws[i] = rect.w
+        hs[i] = rect.h
+    return _can_place_jit(r.x, r.y, r.w, r.h, board.W, board.H, xs, ys, ws, hs)
 
 
 def _candidate_points(board: Board) -> List[Tuple[float, float]]:
