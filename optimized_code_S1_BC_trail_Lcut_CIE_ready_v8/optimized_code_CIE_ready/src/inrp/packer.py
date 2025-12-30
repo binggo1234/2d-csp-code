@@ -4,10 +4,38 @@ from typing import List, Tuple, Optional
 import random
 import math
 
-import numpy as np
-from numba import njit
+# --- [新增] Numba JIT 导入与回退机制 ---
+import importlib.util
+
+if importlib.util.find_spec("numba") is not None:
+    from numba import jit
+    HAS_NUMBA = True
+else:
+    HAS_NUMBA = False
+
+    def jit(*args, **kwargs):
+        def decorator(func):
+            return func
+
+        return decorator
+# --------------------------------------
 
 EPS = 1e-9
+
+
+# --- [新增] 静态 JIT 函数 (极速几何核心) ---
+@jit(nopython=True)
+def _jit_overlap(ax, ay, aw, ah, bx, by, bw, bh, eps):
+    # strict overlap
+    return (ax < bx + bw - eps and ax + aw > bx + eps and
+            ay < by + bh - eps and ay + ah > by + eps)
+
+
+@jit(nopython=True)
+def _jit_inside(rx, ry, rw, rh, W, H, eps):
+    return (rx >= -eps and ry >= -eps and
+            rx + rw <= W + eps and ry + rh <= H + eps)
+# ------------------------------------------
 
 
 @dataclass
@@ -35,59 +63,29 @@ class Board:
     H: float
     placed: List[PlacedPart] = field(default_factory=list)
 
-
-@njit(cache=True, fastmath=True)
-def _overlap_jit(ax: float, ay: float, aw: float, ah: float,
-                 bx: float, by: float, bw: float, bh: float) -> bool:
-    # strict overlap (touching edge is allowed)
-    return (ax < bx + bw - EPS and ax + aw > bx + EPS and
-            ay < by + bh - EPS and ay + ah > by + EPS)
-
-
-@njit(cache=True, fastmath=True)
-def _inside_board_jit(rx: float, ry: float, rw: float, rh: float,
-                      W: float, H: float) -> bool:
-    return (rx >= -EPS and ry >= -EPS and
-            rx + rw <= W + EPS and ry + rh <= H + EPS)
-
-
-@njit(cache=True, fastmath=True)
-def _can_place_jit(rx: float, ry: float, rw: float, rh: float,
-                   W: float, H: float,
-                   xs: np.ndarray, ys: np.ndarray,
-                   ws: np.ndarray, hs: np.ndarray) -> bool:
-    if not _inside_board_jit(rx, ry, rw, rh, W, H):
-        return False
-    n = xs.shape[0]
-    for i in range(n):
-        if _overlap_jit(rx, ry, rw, rh, xs[i], ys[i], ws[i], hs[i]):
-            return False
-    return True
-
-
+# --- [修改] 使用 JIT 核心的包装函数 ---
 def _overlap(a: Rect, b: Rect) -> bool:
-    return _overlap_jit(a.x, a.y, a.w, a.h, b.x, b.y, b.w, b.h)
+    return _jit_overlap(a.x, a.y, a.w, a.h, b.x, b.y, b.w, b.h, EPS)
 
 
 def _inside_board(r: Rect, W: float, H: float) -> bool:
-    return _inside_board_jit(r.x, r.y, r.w, r.h, W, H)
+    return _jit_inside(r.x, r.y, r.w, r.h, W, H, EPS)
 
 
 def _can_place(board: Board, r: Rect) -> bool:
-    if not board.placed:
-        return _inside_board(r, board.W, board.H)
-    n = len(board.placed)
-    xs = np.empty(n, dtype=np.float64)
-    ys = np.empty(n, dtype=np.float64)
-    ws = np.empty(n, dtype=np.float64)
-    hs = np.empty(n, dtype=np.float64)
-    for i, pp in enumerate(board.placed):
-        rect = pp.rect
-        xs[i] = rect.x
-        ys[i] = rect.y
-        ws[i] = rect.w
-        hs[i] = rect.h
-    return _can_place_jit(r.x, r.y, r.w, r.h, board.W, board.H, xs, ys, ws, hs)
+    # 快速解包，减少对象访问开销
+    rx, ry, rw, rh = r.x, r.y, r.w, r.h
+
+    if not _jit_inside(rx, ry, rw, rh, board.W, board.H, EPS):
+        return False
+
+    for pp in board.placed:
+        pr = pp.rect
+        # 调用 JIT 函数
+        if _jit_overlap(rx, ry, rw, rh, pr.x, pr.y, pr.w, pr.h, EPS):
+            return False
+    return True
+# --------------------------------------
 
 
 def _candidate_points(board: Board) -> List[Tuple[float, float]]:
