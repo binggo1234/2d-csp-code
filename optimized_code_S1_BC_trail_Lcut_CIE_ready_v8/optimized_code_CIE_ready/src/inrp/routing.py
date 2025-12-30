@@ -581,13 +581,38 @@ def two_opt(order: List[int], points: List[Point], start: Point = (0.0, 0.0), it
 
 
 def air_length_by_components(comps: List[Set[Point]], start: Point = (0.0, 0.0)) -> float:
-    """Air-move length estimated by a component-level TSP (NN + 2-opt)."""
-    reps = component_representatives(comps)
-    if not reps:
+    """Air-move length via greedy GTSP endpoint selection over components.
+
+    Each component is treated as a cluster of candidate endpoints. We greedily
+    move to the closest endpoint among all unvisited components, which yields
+    a simple yet more realistic "dynamic endpoint" approximation than centroid TSP.
+    """
+    if not comps:
         return 0.0
-    order, _ = nn_tour(reps, start=start)
-    _, L2 = two_opt(order, reps, start=start, iters=200)
-    return L2
+
+    remaining = [list(comp) for comp in comps if comp]
+    if not remaining:
+        return 0.0
+
+    cur = start
+    L = 0.0
+    while remaining:
+        best_idx = None
+        best_pt = None
+        best_d = 1e100
+        for i, pts in enumerate(remaining):
+            for p in pts:
+                d = _euclid(cur, p)
+                if d < best_d:
+                    best_d = d
+                    best_idx = i
+                    best_pt = p
+        L += best_d
+        cur = best_pt
+        remaining.pop(best_idx)
+
+    L += _euclid(cur, start)
+    return L
 
 
 # ---------------- Stroke decomposition (manufacturing-friendly lifts) ----------------
