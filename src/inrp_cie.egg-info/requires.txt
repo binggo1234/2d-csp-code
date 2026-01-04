@@ -1,0 +1,5 @@
+numpy<2,>=1.21
+scipy<2,>=1.7
+matplotlib<4,>=3.4
+numba<0.61,>=0.56
+pandas<3,>=1.5
