@@ -434,6 +434,17 @@ def _euclid(a: Point, b: Point) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
+def tsp_tour_length(points: List[Point], order: List[int], start: Point = (0.0, 0.0)) -> float:
+    """Compute tour length for start -> points[order...] -> start."""
+    if not order:
+        return 0.0
+    L = _euclid(start, points[order[0]])
+    for i in range(len(order) - 1):
+        L += _euclid(points[order[i]], points[order[i + 1]])
+    L += _euclid(points[order[-1]], start)
+    return L
+
+
 def nn_tour(points: List[Point], start: Point = (0.0, 0.0)) -> Tuple[List[int], float]:
     """Nearest-neighbor TSP tour."""
     if not points:
