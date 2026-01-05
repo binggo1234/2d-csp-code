@@ -86,8 +86,8 @@ def _orig_rect_for_display(pp: PlacedPart) -> Tuple[float, float, float, float]:
 
     Returns (x, y, w, h) for the original part rectangle.
     """
-    x, y, w, h = pp.rect
-    if pp.rot:
+    x, y, w, h = pp.rect.x, pp.rect.y, pp.rect.w, pp.rect.h
+    if pp.rotated:
         ow, oh = pp.h0, pp.w0
     else:
         ow, oh = pp.w0, pp.h0
@@ -222,7 +222,7 @@ def plot_board_layout(
     for pp in board.placed:
         # clearance rect
         if show_clearance:
-            x, y, w, h = pp.rect
+            x, y, w, h = pp.rect.x, pp.rect.y, pp.rect.w, pp.rect.h
             ax.add_patch(
                 Rectangle(
                     (x, y), w, h,
