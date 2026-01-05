@@ -123,3 +123,5 @@ class CFG:
     # Additional plot switches
     PLOT_TOOLPATH: bool = True
     PLOT_SHOW_IDS: bool = False
+    # Visual-only shrink margin (mm) so touching parts show a visible gap in layout plots
+    PLOT_VIS_MARGIN: float = 2.0
