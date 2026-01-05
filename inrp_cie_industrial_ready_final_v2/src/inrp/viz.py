@@ -33,6 +33,7 @@ from .routing import (
     build_segments_from_board,
     estimate_cut_and_strokes,
     nn_tour,
+    simulated_annealing_tour,
     two_opt,
 )
 
@@ -101,6 +102,18 @@ def _shrink_rect(x: float, y: float, w: float, h: float, margin: float) -> Tuple
     if margin <= 0:
         return x, y, w, h
     return x + margin, y + margin, max(0.0, w - 2 * margin), max(0.0, h - 2 * margin)
+
+
+def _safe_vis_margin(ow: float, oh: float, vis_margin: float) -> float:
+    """Clamp visual margin so tiny parts still show up."""
+    if vis_margin <= 0:
+        return 0.0
+    if not math.isfinite(ow) or not math.isfinite(oh):
+        return 0.0
+    min_dim = min(ow, oh)
+    if min_dim <= 0:
+        return 0.0
+    return min(vis_margin, 0.45 * min_dim)
 
 
 def _stroke_direction_arrow(ax, trail: List[Point], color: str = "k", scale: float = 1.0) -> None:
@@ -219,6 +232,7 @@ def plot_board_layout(
         )
 
     # Parts
+    drawn_parts = 0
     for pp in board.placed:
         # clearance rect
         if show_clearance:
@@ -236,16 +250,19 @@ def plot_board_layout(
 
         # real part rect (undo inflation) + visual shrink
         ox, oy, ow, oh = _orig_rect_for_display(pp)
-        sx, sy, sw, sh = _shrink_rect(ox, oy, ow, oh, vis_margin)
-        ax.add_patch(
-            Rectangle(
-                (sx, sy), sw, sh,
-                facecolor="white",
-                edgecolor="#333333",
-                lw=0.7,
-                zorder=3,
+        margin = _safe_vis_margin(ow, oh, vis_margin)
+        sx, sy, sw, sh = _shrink_rect(ox, oy, ow, oh, margin)
+        if sw > 0 and sh > 0 and math.isfinite(sw) and math.isfinite(sh):
+            ax.add_patch(
+                Rectangle(
+                    (sx, sy), sw, sh,
+                    facecolor="white",
+                    edgecolor="#333333",
+                    lw=0.7,
+                    zorder=3,
+                )
             )
-        )
+            drawn_parts += 1
 
         if show_ids or show_dims:
             cx, cy = ox + ow / 2.0, oy + oh / 2.0
@@ -256,8 +273,27 @@ def plot_board_layout(
                 lines.append(f"{_fmt_dim(ow)}×{_fmt_dim(oh)}")
             ax.text(cx, cy, "\n".join(lines), ha="center", va="center", fontsize=7, color="#222222", zorder=4)
 
+    if drawn_parts == 0 and board.placed:
+        # Fallback: ensure something is visible if parts are extremely tiny.
+        for pp in board.placed:
+            x, y, w, h = pp.rect.x, pp.rect.y, pp.rect.w, pp.rect.h
+            if w > 0 and h > 0:
+                ax.add_patch(
+                    Rectangle(
+                        (x, y), w, h,
+                        facecolor="white",
+                        edgecolor="#333333",
+                        lw=0.7,
+                        zorder=3,
+                    )
+                )
+                drawn_parts += 1
+
     if title:
         ax.set_title(title, fontsize=10)
+
+    ax.set_xlim(0, board.W)
+    ax.set_ylim(0, board.H)
 
     # Legend (proxy artists)
     from matplotlib.lines import Line2D
@@ -288,12 +324,30 @@ def plot_board_toolpath(
         jitter_seed: Optional[int] = None,
         do_two_opt: bool = True,
         two_opt_max_iter: int = 1200,
+        air_move_min: float = 1.0,
+        tab_enable: bool = False,
+        tab_per_part: int = 0,
+        tab_len: float = 0.0,
+        tab_corner_clear: float = 0.0,
+        line_snap_eps: float = 0.0,
+        min_shared_len: float = 0.0,
+        nd_coord: int = 6,
         title: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Plot toolpath-related visualization (segments + strokes) as PNG+SVG."""
 
     # 1) Build segments
-    segs, L_shared, _ = build_segments_from_board(board, share_mode=share_mode)
+    segs, L_shared, _ = build_segments_from_board(
+        board,
+        share_mode=share_mode,
+        tab_enable=tab_enable,
+        tab_per_part=tab_per_part,
+        tab_len=tab_len,
+        tab_corner_clear=tab_corner_clear,
+        line_snap_eps=line_snap_eps,
+        min_shared_len=min_shared_len,
+        nd=nd_coord,
+    )
 
     # Optional deterministic jitter for baseline (share_mode == 'none')
     if share_mode == "none" and jitter and jitter > 0:
@@ -320,10 +374,12 @@ def plot_board_toolpath(
     # 3) Order strokes (NN + 2-opt)
     if n_strokes == 0:
         order = []
+    elif do_two_opt:
+        order, _ = simulated_annealing_tour(stroke_reps, start=origin, iters=2000, T0=200.0, alpha=0.995)
     else:
         order, _ = nn_tour(stroke_reps, start=origin)
-        if do_two_opt and len(order) >= 4:
-            order, _ = two_opt(stroke_reps, order, start=origin, max_iter=two_opt_max_iter)
+    if do_two_opt and len(order) >= 4:
+        order, _ = two_opt(stroke_reps, order, start=origin, max_iter=two_opt_max_iter)
 
     oriented = _orient_strokes_by_order(stroke_trails, order, origin)
 
@@ -362,7 +418,7 @@ def plot_board_toolpath(
     cur = origin
     for s in oriented:
         # Air move
-        if math.hypot(s.start[0] - cur[0], s.start[1] - cur[1]) > 1e-6:
+        if math.hypot(s.start[0] - cur[0], s.start[1] - cur[1]) >= air_move_min:
             ax.add_patch(
                 FancyArrowPatch(
                     cur, s.start,
@@ -383,6 +439,9 @@ def plot_board_toolpath(
 
     if title:
         ax.set_title(title, fontsize=10)
+
+    ax.set_xlim(0, board.W)
+    ax.set_ylim(0, board.H)
 
     # Legend (proxy)
     from matplotlib.lines import Line2D
@@ -456,11 +515,28 @@ def plot_one_seed_outputs(
                 share_mode=share_mode,
                 cut_mode=cut_mode,
                 origin=origin,
+                tab_enable=tab_enable,
+                tab_per_part=tab_per_part,
+                tab_len=tab_len,
+                tab_corner_clear=tab_corner_clear,
+                line_snap_eps=line_snap_eps,
+                min_shared_len=min_shared_len,
+                nd_coord=nd_coord,
                 title=None,
             )
 
         # Quick metrics (approx) for preview
-        segs, L_shared, _ = build_segments_from_board(b, share_mode=share_mode)
+        segs, L_shared, _ = build_segments_from_board(
+            b,
+            share_mode=share_mode,
+            tab_enable=tab_enable,
+            tab_per_part=tab_per_part,
+            tab_len=tab_len,
+            tab_corner_clear=tab_corner_clear,
+            line_snap_eps=line_snap_eps,
+            min_shared_len=min_shared_len,
+            nd=nd_coord,
+        )
         L_cut, _, n_strokes, _, _, stroke_trails = estimate_cut_and_strokes(segs, cut_mode=cut_mode, return_trails=True)
         order, _ = nn_tour([tr[0] for tr in stroke_trails] if stroke_trails else [], start=origin)
         oriented = _orient_strokes_by_order(stroke_trails, order, origin) if stroke_trails else []
