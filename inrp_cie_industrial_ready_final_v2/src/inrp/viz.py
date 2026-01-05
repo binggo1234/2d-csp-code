@@ -302,10 +302,14 @@ def plot_board_toolpath(
         seed = jitter_seed if jitter_seed is not None else int(board.bid)
         rng = np.random.RandomState(seed)
         jittered: List[Segment] = []
-        for (x1, y1, x2, y2, shared) in segs:
+        for seg in segs:
+            (x1, y1), (x2, y2) = seg.a, seg.b
+            shared = seg.shared
             dx = float(rng.uniform(-jitter, jitter))
             dy = float(rng.uniform(-jitter, jitter))
-            jittered.append((x1 + dx, y1 + dy, x2 + dx, y2 + dy, shared))
+            jittered.append(
+                Segment((x1 + dx, y1 + dy), (x2 + dx, y2 + dy), shared)
+            )
         segs = jittered
 
     # 2) Convert segments into strokes
@@ -347,8 +351,9 @@ def plot_board_toolpath(
 
     # Cut segments
     # (We draw segments directly, and direction/air moves based on oriented strokes.)
-    for (x1, y1, x2, y2, shared) in segs:
-        if shared:
+    for seg in segs:
+        (x1, y1), (x2, y2) = seg.a, seg.b
+        if seg.shared:
             ax.plot([x1, x2], [y1, y2], color="red", lw=2.0, solid_capstyle="butt", zorder=2)
         else:
             ax.plot([x1, x2], [y1, y2], color="#1f77b4", lw=1.1, solid_capstyle="butt", zorder=1)
