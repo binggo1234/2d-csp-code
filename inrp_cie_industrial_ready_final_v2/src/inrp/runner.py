@@ -195,6 +195,7 @@ def run_one_variant(parts, cfg, seed: int, variant: str, out_case_dir: Path) -> 
             share_mode=share_mode,
             plot_toolpath=getattr(cfg, "PLOT_TOOLPATH", True),
             show_ids=getattr(cfg, "PLOT_SHOW_IDS", False),
+            vis_margin=getattr(cfg, "PLOT_VIS_MARGIN", 0.5),
             tab_enable=getattr(cfg, "TAB_ENABLE", False),
             tab_per_part=getattr(cfg, "TAB_PER_PART", 0),
             tab_len=getattr(cfg, "TAB_LEN", 0.0),
