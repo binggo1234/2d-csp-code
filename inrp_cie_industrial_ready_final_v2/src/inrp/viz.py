@@ -404,8 +404,10 @@ def plot_board_toolpath(
 
 def plot_one_seed_outputs(
         boards: List[Board],
+        boards_rows: List[dict],
         out_dir: str,
         *,
+        title: str | None = None,
         max_boards: int = 6,
         plot_toolpath: bool = True,
         show_clearance: bool = True,
@@ -415,11 +417,16 @@ def plot_one_seed_outputs(
         share_mode: str = "shared",
         cut_mode: str = "trail",
         origin: Point = (0.0, 0.0),
+        trim: float = 0.0,
+        tab_enable: bool = False,
+        tab_per_part: int = 0,
+        tab_len: float = 0.0,
+        tab_corner_clear: float = 0.0,
+        line_snap_eps: float = 0.0,
+        min_shared_len: float = 0.0,
+        nd_coord: int = 6,
 ) -> None:
-    """Export per-board figures and a compact metrics preview for one seed.
-
-    This function is called by runner.py when --plot is enabled.
-    """
+    """Export per-board figures and a compact metrics preview for one seed."""
     _ensure_dir(out_dir)
 
     rows = []
