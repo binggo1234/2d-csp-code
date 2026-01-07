@@ -1,0 +1,11 @@
+name: inrp-cie
+channels:
+  - conda-forge
+dependencies:
+  - python=3.8
+  - numpy
+  - scipy
+  - matplotlib
+  - numba
+  - pandas
+  - pytest
