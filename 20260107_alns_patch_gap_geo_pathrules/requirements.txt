@@ -1,0 +1,9 @@
+# Minimal dependencies to run the CIE INRP code + industrial experiment pipeline
+# Compatible with Python 3.8+ (paper uses Python 3.8)
+
+numpy>=1.21,<2
+scipy>=1.7,<2
+matplotlib>=3.4,<4
+numba>=0.56,<0.61
+pandas>=1.5,<3
+pytest>=7,<9
